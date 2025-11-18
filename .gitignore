@@ -1,0 +1,17 @@
+.idea/
+*.iml
+*.iws
+*.ipr
+workspace.xml
+modules.xml
+misc.xml
+vcs.xml
+
+.vscode/
+
+out/
+
+**/*.class
+
+*.log
+*.tmp
