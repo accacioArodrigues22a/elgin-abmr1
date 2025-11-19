@@ -297,7 +297,7 @@ public class Main {
             // caminho para o xml de cancelamento
             String dados = "path=C:\\Users\\andressa_accacio\\Downloads\\Java-Aluno EM\\Java-Aluno EM\\Java-Aluno EM\\CANC_SAT.xml";
             // assinatura qrcode (geralmente fornecida pelo sat)
-            String assQRCode = "Q5DLkpdRijIRGY6YSSNsTWK1TztHL1vD0V1Jc4spo/CEUqICEb9SFy82ym8EhBRZjbh3btsZhF+sjHqEMR159i4agru9x6KsepK/q0E2e5xlU5cv3m1woYfgHyOkWDNcSdMsS6bBh2Bpq6s89yJ9Q6qh/J8YHi306ce9Tqb/drKvN2XdE5noRSS32TAWuaQEVd7u+TrvXlOQsE3fHR1D5f1saUwQLPSdIv01NF6Ny7jZwjCwv1uNDgGZONJdlTJ6p0ccqnZvuE70aHOI09elpjEO6Cd+orI7XHHrFCwhFhAcbalc+ZfO5b/+vkyAHS6CYVFCDtYR9Hi5qgdk31v23w==";
+            String assQRCode = "q5dlkpdrijirgy6yssnstwk1tzt hl1vd0v1jc4spo/ceuqiceb9sfy82ym8ehbrzjb h3btszhf+sjhqemr159i4agru9x6ksepk/q0e2e5xlu5cv3m1woyfg hyokwdncsdmsl6bdh2bpq6s89yj9q6qh/j8yhi306ce9tqb/drkvn2xde5norss32tawuqevd7u+trvxlsqse3fhr1d5f1satawqlpsd iv01nf6ny7jzwjcwv1undagmzonjdl jtj6p0ccqnzvut70ahoi09elpj eo6cd+oris7xhhrfcwhfhacbalc+zf o5b/+vkyahs6cyvfcdt yr9hi5qgdk31v23w==";
 
             // imprime o cancelamento (caminho do xml, assinatura qrcode, parâmetro extra)
             int retorno = ImpressoraDLL.INSTANCE.ImprimeXMLCancelamentoSAT(dados, assQRCode, 0);
