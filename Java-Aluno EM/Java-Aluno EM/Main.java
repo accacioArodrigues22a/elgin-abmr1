@@ -1,352 +1,332 @@
-import com.sun.jna.Library; // importa a classe base para mapear bibliotecas nativas (DLLs)
-import com.sun.jna.Native; // importa a classe para carregar a biblioteca nativa
-import java.util.Scanner; // importa a classe para ler a entrada do usuário
-import javax.swing.JFileChooser; // importa para permitir a seleção de arquivos (embora não esteja sendo usado neste código, foi mantido como estava)
-import java.io.File; // importa a classe file (não está sendo usado, mas foi mantido como estava)
-import java.io.IOException; // importa para lidar com exceções de entrada/saída
-import java.nio.charset.StandardCharsets; // importa para especificar o encoding (utf-8)
-import java.io.FileInputStream; // importa para ler o conteúdo de um arquivo
+import com.sun.jna.Library; // Interface principal para carregar DLLs
+import com.sun.jna.Native; // Carrega a biblioteca nativa no Java
+import java.util.Scanner; // Para leitura de entrada do console
+import javax.swing.JFileChooser; // Não utilizado neste código
+import java.io.File; // Não utilizado neste código
+import java.io.IOException; // Para lidar com erros de I/O
+import java.nio.charset.StandardCharsets; // Codificação de caracteres (UTF-8)
+import java.io.FileInputStream; // Para ler dados de arquivo como bytes
 
-// a classe principal que contém o menu e a lógica de comunicação com a impressora
 public class Main {
 
-    // esta interface é o coração do jna: ela mapeia as funções da dll para métodos java
+    // Mapeia as funções da DLL da impressora
     public interface ImpressoraDLL extends Library {
 
-        // a instância única que carrega a dll. o jna se encarrega de fazer a ponte
+        // Instancia a DLL (E1_Impressora01.dll) e a carrega usando JNA
         ImpressoraDLL INSTANCE = (ImpressoraDLL) Native.load(
-                // o caminho da dll no sistema. atenção ao caminho!
                 "C:\\Users\\Andressa\\Desktop\\Java-Aluno EM\\Java-Aluno EM\\E1_Impressora01.dll",
-                ImpressoraDLL.class // a interface que define as funções da dll
+                ImpressoraDLL.class
         );
 
-        // método para iniciar a conexão com a impressora
+        // --- Funções da DLL Mapeadas ---
+
+        // Abre a conexão com a impressora
         int AbreConexaoImpressora(int tipo, String modelo, String conexao, int param);
-        // método para encerrar a conexão com a impressora
+        // Fecha a conexão ativa
         int FechaConexaoImpressora();
-        // método para imprimir um texto com formatação
+        // Imprime um texto
         int ImpressaoTexto(String dados, int posicao, int estilo, int tamanho);
-        // método para cortar o papel. 'avanco' pode ser o tipo de corte ou avanço antes do corte
+        // Executa um corte de papel
         int Corte(int avanco);
-        // método para imprimir um qrcode. (dados, tamanho do módulo, nível de correção)
+        // Imprime um código QR Code
         int ImpressaoQRCode(String dados, int tamanho, int nivelCorrecao);
-        // método para imprimir um código de barras. (tipo, dados, altura, largura, hri)
+        // Imprime um código de barras
         int ImpressaoCodigoBarras(int tipo, String dados, int altura, int largura, int HRI);
-        // método para avançar o papel em 'linhas'
+        // Avança o papel
         int AvancaPapel(int linhas);
-        // método para checar o status atual da impressora (se está com papel, tampa aberta, etc.)
+        // Consulta o status da impressora
         int StatusImpressora(int param);
-        // método específico para abrir a gaveta de dinheiro no padrão elgin
+        // Aciona a abertura da gaveta de dinheiro (Elgin)
         int AbreGavetaElgin();
-        // método genérico para abrir a gaveta de dinheiro (pino, tempo inicial, tempo final)
+        // Aciona a abertura da gaveta de dinheiro (genérico)
         int AbreGaveta(int pino, int ti, int tf);
-        // método para emitir um sinal sonoro (beep)
+        // Emite um sinal sonoro (beep)
         int SinalSonoro(int qtd, int tempoInicio, int tempoFim);
-        // métodos para usar o "modo página", permitindo posicionar impressões livremente
+        // Entra no modo de página
         int ModoPagina();
+        // Limpa o buffer de impressão do modo página
         int LimpaBufferModoPagina();
+        // Imprime o conteúdo bufferizado (modo página)
         int ImprimeModoPagina();
+        // Retorna para o modo de impressão padrão
         int ModoPadrao();
+        // Define a posição horizontal (modo página)
         int PosicaoImpressaoHorizontal(int posicao);
+        // Define a posição vertical (modo página)
         int PosicaoImpressaoVertical(int posicao);
-        // método para imprimir um xml sat (cupom fiscal eletrônico paulista)
+        // Imprime o Extrato SAT Fiscal (XML)
         int ImprimeXMLSAT(String dados, int param);
-        // método para imprimir o cancelamento de um xml sat
+        // Imprime o Extrato de Cancelamento SAT (XML)
         int ImprimeXMLCancelamentoSAT(String dados, String assQRCode, int param);
     }
 
-    // variável de controle para saber se a conexão está ativa
+    // Status da conexão: true se aberta
     private static boolean conexaoAberta = false;
-    // variáveis para armazenar a configuração da conexão
-    private static int tipo; // usb, serial, rede
-    private static String modelo; // i9, i8, etc.
-    private static String conexao; // usb, com1, 192.168.0.1
-    private static int parametro; // 0 para usb, baudrate para serial
-    // objeto scanner para ler a entrada do console do usuário
+    // Parâmetros de conexão
+    private static int tipo; // 1=USB, 2=Serial, 3=Rede
+    private static String modelo;
+    private static String conexao; // Ex: USB, COM1, 192.168.0.1
+    private static int parametro; // Ex: Baudrate para Serial
+    // Scanner para ler a entrada do usuário
     private static final Scanner scanner = new Scanner(System.in);
 
-    // função auxiliar para pegar a entrada do usuário de forma mais limpa
-    private static String capturarEntrada(String mensagem) {
-        System.out.print(mensagem);
-        return scanner.nextLine();
-    }
+    // --- Métodos de Controle e Impressão ---
 
-    // função para configurar as informações de conexão que serão usadas depois
+    // Define os parâmetros de conexão
     public static void configurarConexao() {
-        // impede a reconfiguração se a conexão já estiver aberta
         if (conexaoAberta) {
-            System.out.println("⚠️ conexão já está aberta. feche antes de reconfigurar.");
+            System.out.println("⚠️ Conexão já está aberta. Feche antes de reconfigurar.");
             return;
         }
 
         try {
-            System.out.println("\n--- configurar conexão ---");
-            // captura o tipo de conexão e converte para int
-            System.out.print("digite o tipo (1=usb, 2=serial, 3=rede): ");
+            System.out.println("\n--- Configurar Conexão ---");
+            System.out.print("Digite o tipo (1=USB, 2=Serial, 3=Rede): ");
             tipo = Integer.parseInt(scanner.nextLine());
 
-            // captura o modelo da impressora
-            System.out.print("digite o modelo (ex: i9, i8): ");
+            System.out.print("Digite o modelo (ex: i9, i8): ");
             modelo = scanner.nextLine();
 
-            // captura o endereço de conexão (porta, ip, nome)
-            System.out.print("digite a conexao (ex: usb, com1, 192.168.0.1): ");
+            System.out.print("Digite a conexao (ex: USB, COM1, 192.168.0.1): ");
             conexao = scanner.nextLine();
 
-            // captura o parâmetro de conexão (baudrate ou 0)
-            System.out.print("digite o parametro (ex: 0 para usb, 9600 para serial): ");
+            System.out.print("Digite o parametro (ex: 0 para USB, 9600 para Serial): ");
             parametro = Integer.parseInt(scanner.nextLine());
 
-            System.out.println("✅ configuração salva.");
+            System.out.println("✅ Configuração salva.");
 
         } catch (NumberFormatException e) {
-            // tratamento de erro caso o usuário digite texto onde deveria ser número
-            System.err.println("❌ erro: tipo e parâmetro devem ser números.");
+            System.err.println("❌ Erro: Tipo e Parâmetro devem ser números.");
         }
     }
 
-    // função que, de fato, abre a conexão com a impressora
+    // Abre a conexão com a impressora
     public static void AbreConexaoImpressora() {
-        // só tenta abrir se ainda não estiver aberta
         if (!conexaoAberta) {
-            // chama a função da dll com os parâmetros configurados
             int retorno = ImpressoraDLL.INSTANCE.AbreConexaoImpressora(tipo, modelo, conexao, parametro);
             if (retorno == 0) {
-                // sucesso
                 conexaoAberta = true;
-                System.out.println("✅ conexão aberta com sucesso.");
+                System.out.println("✅ Conexão aberta com sucesso.");
             } else {
-                // falha
-                System.out.println("❌ erro ao abrir conexão. código de erro: " + retorno);
+                System.out.println("❌ Erro ao abrir conexão. Código de erro: " + retorno);
             }
         } else {
-            System.out.println("⚠️ conexão já está aberta.");
+            System.out.println("⚠️ Conexão já está aberta.");
         }
     }
 
-    // função que fecha a conexão com a impressora
+    // Fecha a conexão ativa
     public static void FechaConexaoImpressora() {
-        // só tenta fechar se estiver aberta
         if (conexaoAberta) {
             int retorno = ImpressoraDLL.INSTANCE.FechaConexaoImpressora();
             if (retorno == 0) {
-                // sucesso
                 conexaoAberta = false;
-                System.out.println("✅ conexão fechada.");
+                System.out.println("✅ Conexão fechada.");
             } else {
-                // falha
-                System.err.println("❌ erro ao fechar conexão. código: " + retorno);
+                System.err.println("❌ Erro ao fechar conexão. Código: " + retorno);
             }
         } else {
-            System.out.println("⚠️ conexão já estava fechada.");
+            System.out.println("⚠️ Conexão já estava fechada.");
         }
     }
 
-    // função para demonstrar a impressão de texto
+    // Imprime um texto digitado pelo usuário
     public static void ImpressaoTexto() {
         if (conexaoAberta) {
-            String texto = capturarEntrada("digite o texto para imprimir: ");
-            // imprime o texto. (texto, posição, estilo, tamanho)
+            System.out.print("Digite o texto para imprimir: ");
+            String texto = scanner.nextLine();
+
+            // Posição: 1=Esquerda, Estilo: 4=Normal, Tamanho: 0=Padrão
             int retorno = ImpressoraDLL.INSTANCE.ImpressaoTexto(texto, 1, 4, 0);
             if (retorno == 0) {
-                System.out.println("✅ impressão de texto realizada com sucesso.");
+                System.out.println("✅ Impressão de texto realizada com sucesso.");
             } else {
-                System.err.println("❌ erro ao imprimir texto. código: " + retorno);
+                System.err.println("❌ Erro ao imprimir texto. Código: " + retorno);
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para demonstrar o corte de papel
+    // Executa um corte de papel (total)
     public static void Corte() {
         if (conexaoAberta) {
-            // executa o corte (param: 1=corte total, 2=corte parcial, 3=avançar papel)
-            int retorno = ImpressoraDLL.INSTANCE.Corte(2);
+            int retorno = ImpressoraDLL.INSTANCE.Corte(2); // 2 = corte total
             if (retorno == 0) {
-                System.out.println("✅ corte realizado com sucesso.");
+                System.out.println("✅ Corte realizado com sucesso.");
             } else {
-                System.err.println("❌ erro ao realizar corte. código: " + retorno);
+                System.err.println("❌ Erro ao realizar corte. Código: " + retorno);
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para demonstrar a impressão de qrcode
+    // Imprime um QR Code com dados fornecidos pelo usuário
     public static void ImpressaoQRCode() {
         if (conexaoAberta) {
-            String dados = capturarEntrada("digite o texto para imprimir: ");
-            // imprime o qrcode (dados, tamanho do módulo (1-16), nível de correção (1-4))
+            System.out.print("Digite o QRCODE para imprimir: ");
+            String dados = scanner.nextLine();
+
+            // Tamanho: 6, Nível de correção: 4
             int retorno = ImpressoraDLL.INSTANCE.ImpressaoQRCode(dados, 6,4);
             if (retorno == 0) {
-                System.out.println("✅ impressão de qrcode realizada com sucesso.");
+                System.out.println("✅ Impressão de QRCODE realizada com sucesso.");
             } else {
-                System.err.println("❌ erro ao imprimir qrcode. código: " + retorno);
+                System.err.println("❌ Erro ao imprimir QRCODE. Código: " + retorno);
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para demonstrar a impressão de código de barras
+    // Imprime um Código de Barras (EAN-13 fixo)
     public static void ImpressaoCodigoBarras() {
         if (conexaoAberta) {
-            // dados de exemplo para o código de barras (code 128)
-            String dados = "{A012345678912";
-
-            // imprime o código de barras (tipo (ex: 8=code 128), dados, altura, largura, hri (posição dos números))
+            String dados = "{A012345678912"; // Dados de teste EAN-13
+            // Tipo: 8 (EAN-13), Altura: 100, Largura: 2, HRI: 3 (posição do texto)
             int retorno = ImpressoraDLL.INSTANCE.ImpressaoCodigoBarras(8, dados, 100, 2, 3);
 
             if (retorno == 0) {
-                System.out.println("✅ impressão de cód. barras realizada com sucesso.");
+                System.out.println("✅ Impressão de Cód. Barras realizada com sucesso.");
             } else {
-                System.err.println("❌ erro ao imprimir cód. barras. código: " + retorno);
-                // dica para o usuário em caso de erro comum
-                System.out.println("dica: verifique se a bobina não acabou ou se a tampa está aberta.");
+                System.err.println("❌ Erro ao imprimir Cód. Barras. Código: " + retorno);
+                System.out.println("DICA: Verifique se a bobina não acabou ou se a tampa está aberta.");
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para avançar o papel
+    // Avança o papel
     public static void AvancaPapel() {
         if (conexaoAberta) {
-            // avança o papel em 2 linhas
-            int retorno = ImpressoraDLL.INSTANCE.AvancaPapel(2);
+            int retorno = ImpressoraDLL.INSTANCE.AvancaPapel(2); // Avança 2 linhas
             if (retorno == 0) {
-                System.out.println("✅ papel avançado com sucesso.");
+                System.out.println("✅ Papel avançado com sucesso.");
             } else {
-                System.err.println("❌ erro ao avançar papel. código: " + retorno);
+                System.err.println("❌ Erro ao avançar papel. Código: " + retorno);
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para abrir a gaveta de dinheiro (modelo elgin)
+    // Aciona a gaveta de dinheiro (Elgin)
     public static void AbreGavetaElgin() {
         if (conexaoAberta) {
             int retorno = ImpressoraDLL.INSTANCE.AbreGavetaElgin();
             if (retorno == 0) {
-                System.out.println("✅ gaveta elgin acionada.");
+                System.out.println("✅ Gaveta Elgin acionada.");
             } else {
-                System.err.println("❌ erro ao acionar gaveta elgin. código: " + retorno);
+                System.err.println("❌ Erro ao acionar Gaveta Elgin. Código: " + retorno);
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para abrir a gaveta de dinheiro (genérica)
+    // Aciona a gaveta de dinheiro (Genérico)
     public static void AbreGaveta() {
         if (conexaoAberta) {
-            // abre a gaveta (pino, tempo inicial, tempo final)
-            int retorno = ImpressoraDLL.INSTANCE.AbreGaveta(1, 5, 10);
+            int retorno = ImpressoraDLL.INSTANCE.AbreGaveta(1, 5, 10); // Pino 1, tempos 5ms/10ms
             if (retorno == 0) {
-                System.out.println("✅ gaveta genérica acionada.");
+                System.out.println("✅ Gaveta Genérica acionada.");
             } else {
-                System.err.println("❌ erro ao acionar gaveta genérica. código: " + retorno);
+                System.err.println("❌ Erro ao acionar Gaveta Genérica. Código: " + retorno);
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para emitir um sinal sonoro (beep)
+    // Emite um sinal sonoro (beep)
     public static void SinalSonoro() {
         if (conexaoAberta) {
-            // emite 4 bipes (quantidade, tempo inicial, tempo final)
-            int retorno = ImpressoraDLL.INSTANCE.SinalSonoro(4, 5, 5);
+            int retorno = ImpressoraDLL.INSTANCE.SinalSonoro(4, 5, 5); // 4 beeps
             if (retorno == 0) {
-                System.out.println("✅ sinal sonoro emitido.");
+                System.out.println("✅ Sinal sonoro emitido.");
             } else {
-                System.err.println("❌ erro ao emitir sinal sonoro. código: " + retorno);
+                System.err.println("❌ Erro ao emitir sinal sonoro. Código: " + retorno);
             }
         } else {
-            System.err.println("❌ erro: precisa abrir conexao primeiro.");
+            System.err.println("❌ Erro: Precisa abrir conexao primeiro.");
         }
     }
 
-    // função para imprimir um xml do sat
+    // Imprime Extrato SAT (XML)
     public static void ImprimeXMLSAT() {
         if(conexaoAberta){
-
-            // a string contém o caminho para o xml sat
+            // Caminho fixo do XML (precisa ser real)
             String dados = "path=C:\\Users\\andressa_accacio\\Downloads\\Java-Aluno EM\\Java-Aluno EM\\Java-Aluno EM\\XMLSAT.xml";
 
-            // imprime o xml (caminho, parâmetro extra)
             int retorno = ImpressoraDLL.INSTANCE.ImprimeXMLSAT(dados,0);
 
             if(retorno == 0){
-                System.out.println("xml impresso com sucesso");
+                System.out.println("XML impresso com sucesso");
             }else{
-                System.out.println("erro. retorno "+retorno);
+                System.out.println("Erro. Retorno "+retorno);
             }
 
         }else{
-            System.out.println("precisa abrir a conexao primeiro");
+            System.out.println("Precisa abrir a conexao primeiro");
         }
     }
 
-    // função para imprimir o cancelamento de um xml sat
+    // Imprime Cancelamento SAT (XML)
     public static void ImprimeXMLCancelamentoSAT() {
         if(conexaoAberta){
-
-            // caminho para o xml de cancelamento
+            // Caminho fixo do XML de cancelamento (precisa ser real)
             String dados = "path=C:\\Users\\andressa_accacio\\Downloads\\Java-Aluno EM\\Java-Aluno EM\\Java-Aluno EM\\CANC_SAT.xml";
-            // assinatura qrcode (geralmente fornecida pelo sat)
-            String assQRCode = "q5dlkpdrijirgy6yssnstwk1tzt hl1vd0v1jc4spo/ceuqiceb9sfy82ym8ehbrzjb h3btszhf+sjhqemr159i4agru9x6ksepk/q0e2e5xlu5cv3m1woyfg hyokwdncsdmsl6bdh2bpq6s89yj9q6qh/j8yhi306ce9tqb/drkvn2xde5norss32tawuqevd7u+trvxlsqse3fhr1d5f1satawqlpsd iv01nf6ny7jzwjcwv1undagmzonjdl jtj6p0ccqnzvut70ahoi09elpj eo6cd+oris7xhhrfcwhfhacbalc+zf o5b/+vkyahs6cyvfcdt yr9hi5qgdk31v23w==";
+            String assQRCode = "Q5DLkpdRijIRGY6YSSNsTWK1TztHL1vD0V1Jc4spo/CEUqICEb9SFy82ym8EhBRZjbh3btsZhF+sjHqEMR159i4agru9x6KsepK/q0E2e5xlU5cv3m1woYfgHyOkWDNcSdMsS6bBh2Bpq6s89yJ9Q6qh/J8YHi306ce9Tqb/drKvN2XdE5noRSS32TAWuaQEVd7u+TrvXlOQsE3fHR1D5f1saUwQLPSdIv01NF6Ny7jZwjCwv1uNDgGZONJdlTJ6p0ccqnZvuE70aHOI09elpjEO6Cd+orI7XHHrFCwhFhAcbalc+ZfO5b/+vkyAHS6CYVFCDtYR9Hi5qgdk31v23w==";
 
-            // imprime o cancelamento (caminho do xml, assinatura qrcode, parâmetro extra)
             int retorno = ImpressoraDLL.INSTANCE.ImprimeXMLCancelamentoSAT(dados, assQRCode, 0);
 
             if(retorno == 0){
-                System.out.println("xml impresso com sucesso");
+                System.out.println("XML impresso com sucesso");
             }else{
-                System.out.println("erro. retorno "+retorno);
+                System.out.println("Erro. Retorno "+retorno);
             }
 
         }else{
-            System.out.println("precisa abrir a conexao primeiro");
+            System.out.println("Precisa abrir a conexao primeiro");
         }
     }
 
-    // a função principal do programa, onde o menu é executado
+    // Método principal
     public static void main(String[] args) {
-        // loop infinito para manter o menu ativo até o usuário sair
+        // Loop principal do menu
         while (true) {
-            // exibe o menu principal com o status da conexão
+            // Imprime o menu com o status da conexão
             System.out.println("\n*************************************************");
-            System.out.println("**************** menu impressora *******************");
-            System.out.println("      (conexão: " + (conexaoAberta ? "aberta" : "fechada") + ")");
+            System.out.println("**************** MENU IMPRESSORA *******************");
+            System.out.println("     (Conexão: " + (conexaoAberta ? "ABERTA" : "FECHADA") + ")");
             System.out.println("*************************************************\n");
 
-            System.out.println("1  - configurar conexao");
-            System.out.println("2  - abrir conexao");
+            System.out.println("1  - Configurar Conexao");
+            System.out.println("2  - Abrir Conexao");
             System.out.println("-------------------------------------------------");
-            System.out.println("3  - impressao texto (padrao)");
-            System.out.println("4  - impressao qr code (padrao)");
-            System.out.println("5  - impressao cod barras (padrao)");
-            System.out.println("6  - imprime xml sat");
-            System.out.println("7  - imprime xml cancelamento sat");
+            System.out.println("3  - Impressao Texto (PADRAO)");
+            System.out.println("4  - Impressao QR Code (PADRAO)");
+            System.out.println("5  - Impressao Cod Barras (PADRAO)");
+            System.out.println("6  - Imprime XML SAT");
+            System.out.println("7  - Imprime XML Cancelamento SAT");
             System.out.println("-------------------------------------------------");
-            System.out.println("8  - abrir gaveta elgin");
-            System.out.println("9  - abrir gaveta (genérica)");
-            System.out.println("10 - emitir sinal sonoro");
-            System.out.println("\n0  - fechar conexao e sair");
+            System.out.println("8  - Abrir Gaveta Elgin");
+            System.out.println("9  - Abrir Gaveta (Genérica)");
+            System.out.println("10 - Emitir Sinal Sonoro");
+            System.out.println("\n0  - Fechar Conexao e Sair");
 
-            String escolha = capturarEntrada("\ndigite a opção desejada: ");
+            System.out.print("\nDigite a opção desejada: ");
+            String escolha = scanner.nextLine();
 
-            // opção 0 para sair do programa
             if (escolha.equals("0")) {
-                FechaConexaoImpressora(); // tenta fechar a conexão antes de sair
-                System.out.println("programa encerrado.");
-                break; // sai do loop while
+                FechaConexaoImpressora(); // Fecha a conexão
+                System.out.println("Programa encerrado.");
+                break;
             }
 
-            // usa switch para processar a escolha do usuário
+            // Executa a função escolhida
             switch (escolha) {
                 case "1":
                     configurarConexao();
@@ -355,28 +335,23 @@ public class Main {
                     AbreConexaoImpressora();
                     break;
                 case "3":
-                    // limpa o buffer e imprime texto seguido de um corte
-                    ImpressoraDLL.INSTANCE.LimpaBufferModoPagina(); // boa prática para evitar lixo
+                    ImpressoraDLL.INSTANCE.LimpaBufferModoPagina(); // Limpa buffer
                     ImpressaoTexto();
-                    ImpressoraDLL.INSTANCE.Corte(4); // o 4 aqui pode ser um avanço seguido de corte
+                    ImpressoraDLL.INSTANCE.Corte(4); // Corte parcial
                     break;
                 case "4":
-                    // imprime qrcode seguido de um corte
                     ImpressaoQRCode();
                     ImpressoraDLL.INSTANCE.Corte(4);
                     break;
                 case "5":
-                    // imprime código de barras seguido de um corte
                     ImpressaoCodigoBarras();
                     ImpressoraDLL.INSTANCE.Corte(4);
                     break;
                 case "6":
-                    // imprime xml sat seguido de um corte
                     ImprimeXMLSAT();
                     ImpressoraDLL.INSTANCE.Corte(4);
                     break;
                 case "7":
-                    // imprime cancelamento sat seguido de um corte
                     ImprimeXMLCancelamentoSAT();
                     ImpressoraDLL.INSTANCE.Corte(4);
                     break;
@@ -389,21 +364,21 @@ public class Main {
                 case "10":
                     SinalSonoro();
                     break;
+
                 default:
-                    System.out.println("opção inválida");
+                    System.out.println("OPÇÃO INVÁLIDA");
             }
         }
 
-        // fecha o scanner ao sair do programa
-        scanner.close();
+        scanner.close(); // Fecha o Scanner
     }
 
-    // função auxiliar para ler o conteúdo de um arquivo (não está sendo usada nas funções xmls, que usam o path)
+    // Lê o conteúdo de um arquivo para uma String (não utilizado nos métodos de impressão)
     private static String lerArquivoComoString(String path) throws IOException {
         FileInputStream fis = new FileInputStream(path);
         byte[] data = fis.readAllBytes();
         fis.close();
-        // lê o arquivo e retorna como string usando utf-8
+        // Converte bytes para String UTF-8
         return new String(data, StandardCharsets.UTF_8);
     }
 }
