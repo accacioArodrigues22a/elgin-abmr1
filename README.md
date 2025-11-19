@@ -104,12 +104,6 @@ Envia pulso elétrico configurável (pino, tempo inicial, tempo final) para acio
 **Opção 10: Emitir Sinal Sonoro**
 Aciona o buzzer interno da impressora.
 
-**Opção 11: Avança Papel**
-Avança uma quantidade predefinida de linhas em branco.
-
-**Opção 12: Corte**
-Aciona a guilhotina para corte do papel.
-
 **Opção 0: Fechar Conexão e Sair**
 Encerra a comunicação com a porta da impressora e finaliza a aplicação Java.
 
